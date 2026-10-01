@@ -1,0 +1,16 @@
+[package]
+name = "jocky-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+jocky-lexer = { workspace = true }
+jocky-parser = { workspace = true }
+jocky-ir = { workspace = true }
+jocky-runtime = { workspace = true }
+jocky-api = { workspace = true }
+jocky-common = { workspace = true }
+serde_json = "1.0"
+tokio = { version = "1.34", features = ["full"] }
+axum = "0.7"

@@ -1,0 +1,9 @@
+[package]
+name = "jocky-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jocky-common = { workspace = true }
+jocky-lexer = { workspace = true }
+jocky-ast = { workspace = true }

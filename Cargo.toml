@@ -1,0 +1,25 @@
+[workspace]
+members = [
+    "crates/jocky-cli",
+    "crates/jocky-lexer",
+    "crates/jocky-parser",
+    "crates/jocky-ast",
+    "crates/jocky-ir",
+    "crates/jocky-runtime",
+    "crates/jocky-forensics",
+    "crates/jocky-detection",
+    "crates/jocky-common",
+    "crates/jocky-api",
+]
+resolver = "2"
+
+[workspace.dependencies]
+jocky-api = { path = "crates/jocky-api" }
+jocky-common = { path = "crates/jocky-common" }
+jocky-lexer = { path = "crates/jocky-lexer" }
+jocky-parser = { path = "crates/jocky-parser" }
+jocky-ast = { path = "crates/jocky-ast" }
+jocky-ir = { path = "crates/jocky-ir" }
+jocky-runtime = { path = "crates/jocky-runtime" }
+jocky-forensics = { path = "crates/jocky-forensics" }
+jocky-detection = { path = "crates/jocky-detection" }

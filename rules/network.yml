@@ -1,0 +1,9 @@
+- id: NET-SUSPICIOUS-PORT-001
+  name: Suspicious Network Port
+  description: Detects connections to suspicious ports.
+  severity: high
+  evidence_type: network
+  conditions:
+    - !equals
+      field: remote_port
+      value: "4444"

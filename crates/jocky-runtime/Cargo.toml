@@ -1,0 +1,13 @@
+[package]
+name = "jocky-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jocky-ir = { workspace = true }
+jocky-common = { workspace = true }
+jocky-forensics = { workspace = true }
+jocky-detection = { workspace = true }
+serde_json = "1.0"
+chrono = "0.4"
+uuid = { version = "1.7", features = ["v4"] }

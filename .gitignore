@@ -1,0 +1,39 @@
+# Rust
+target/
+**/target/
+
+# Node / frontend dependencies
+node_modules/
+**/node_modules/
+
+# Frontend build output
+dist/
+**/dist/
+
+# Tauri build output
+ui/src-tauri/target/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Generated JOCKY investigation artifacts
+investigation.json
+investigation_test.json
+timeline.json
