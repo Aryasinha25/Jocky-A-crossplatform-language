@@ -19,11 +19,19 @@ func NewRouter(db *sql.DB, apiKey string) *http.ServeMux {
 
 	// Authenticated routes
 	authMux := http.NewServeMux()
-	
+
 	authMux.HandleFunc("/api/v1/endpoints/register", endpoint.RegisterHandler(db))
 	authMux.HandleFunc("/api/v1/endpoints/heartbeat", endpoint.HeartbeatHandler(db)) // Requires ?id=uuid
 	authMux.HandleFunc("/api/v1/endpoints", endpoint.ListHandler(db))
-	
+
+	authMux.HandleFunc("/api/v1/investigations/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			investigation.GetHandler(db)(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	authMux.HandleFunc("/api/v1/investigations", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			investigation.IngestHandler(db)(w, r)
