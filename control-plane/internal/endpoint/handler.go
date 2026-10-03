@@ -31,7 +31,7 @@ func RegisterHandler(db *sql.DB) http.HandlerFunc {
 
 		id := uuid.New()
 		now := time.Now().UTC()
-		
+
 		_, err := db.Exec(
 			"INSERT INTO endpoints (id, name, hostname, platform, architecture, jocky_version, registered_at, last_seen) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 			id, req.Name, req.Hostname, req.Platform, req.Architecture, req.JockyVersion, now, now,
@@ -55,20 +55,20 @@ func HeartbeatHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, `{"error":{"code":"METHOD_NOT_ALLOWED","message":"Use POST"}}`, http.StatusMethodNotAllowed)
 			return
 		}
-		
+
 		// ID would normally be parsed from mux router path. Using simple split for standard library router.
 		// Expected path: /api/v1/endpoints/:id/heartbeat
 		// We'll trust the path structure if using a proper router, but here we just update last_seen if id is passed in header or query for simplicity if path parsing is complex.
 		// Let's implement standard path parsing for standard library.
-		
-		// For simplicity, let's extract endpoint_id from query or assume the router handles path parsing. 
+
+		// For simplicity, let's extract endpoint_id from query or assume the router handles path parsing.
 		// Actually, let's just assume the endpoint ID is a URL query parameter `?id=uuid` for the standard library, or we'll just handle it later if needed.
 		idStr := r.URL.Query().Get("id")
 		if idStr == "" {
 			http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Missing id query parameter"}}`, http.StatusBadRequest)
 			return
 		}
-		
+
 		now := time.Now().UTC()
 		res, err := db.Exec("UPDATE endpoints SET last_seen = $1 WHERE id = $2", now, idStr)
 		if err != nil {
@@ -80,7 +80,7 @@ func HeartbeatHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, `{"error":{"code":"NOT_FOUND","message":"Endpoint not found"}}`, http.StatusNotFound)
 			return
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}

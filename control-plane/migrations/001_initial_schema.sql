@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS findings (
     description TEXT NOT NULL,
     severity VARCHAR(50) NOT NULL,
     confidence FLOAT NOT NULL,
+    evidence_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (id, investigation_id, endpoint_id),
     FOREIGN KEY (endpoint_id, investigation_id) REFERENCES investigations(endpoint_id, id) ON DELETE CASCADE

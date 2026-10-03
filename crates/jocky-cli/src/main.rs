@@ -1,3 +1,5 @@
+mod client;
+
 use clap::{Parser, Subcommand};
 use jocky_api::{create_router, InMemoryStore};
 use jocky_ir::generate_ir;
@@ -18,10 +20,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run a JOCKY investigation script
     Run {
         /// The path to the script to run
         file: String,
+        /// Submit the result to the JOCKY Control Plane
+        #[arg(long)]
+        submit: bool,
     },
     /// Check the syntax of a JOCKY script without running it
     Check {
@@ -46,7 +50,7 @@ async fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Run { file } => {
+        Commands::Run { file, submit } => {
             let content = fs::read_to_string(file).expect("Failed to read file");
             let tokens = lex(&content).expect("Lexer error");
             let ast = parse(&tokens).expect("Parser error");
@@ -143,6 +147,27 @@ async fn main() {
             fs::write("timeline.json", timeline_str).expect("Failed to write timeline output");
 
             println!("Report\ninvestigation.json\ntimeline.json");
+
+            if *submit {
+                println!("\nSubmitting to Control Plane...");
+                match client::ControlPlaneClient::from_env() {
+                    Ok(client) => {
+                        if let Err(e) = client.submit_investigation(&result).await {
+                            eprintln!("[-] Submission failed: {}", e);
+                            std::process::exit(1);
+                        } else {
+                            println!(
+                                "[✓] Successfully submitted investigation {}",
+                                result.investigation_id
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[-] Configuration error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
         Commands::Check { file } => {
             let content = fs::read_to_string(file).expect("Failed to read file");

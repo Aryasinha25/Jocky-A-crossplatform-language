@@ -27,7 +27,7 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
 	log.Printf("JOCKY Control Plane listening on %s", addr)
-	
+
 	if err := http.ListenAndServe(addr, router); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}

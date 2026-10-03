@@ -4,57 +4,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"time"
+	"strconv"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"jocky-control-plane/internal/models"
+	"jocky-control-plane/internal/storage"
 )
-
-type GraphNode struct {
-	Type          string                 `json:"type"`
-	ID            string                 `json:"id"`
-	Host          string                 `json:"host,omitempty"`
-	Timestamp     string                 `json:"timestamp"`
-	EvidenceType  string                 `json:"evidence_type,omitempty"`
-	Source        string                 `json:"source,omitempty"`
-	Attributes    map[string]interface{} `json:"attributes,omitempty"`
-	RuleID        string                 `json:"rule_id,omitempty"`
-	Title         string                 `json:"title,omitempty"`
-	Severity      string                 `json:"severity,omitempty"`
-	Confidence    float64                `json:"confidence,omitempty"`
-}
-
-type GraphEdge struct {
-	Source       string `json:"source"`
-	Relationship string `json:"relationship"`
-	Target       string `json:"target"`
-}
-
-type TimelineEvent struct {
-	Timestamp   string `json:"timestamp"`
-	EventType   string `json:"event_type"`
-	EvidenceID  string `json:"evidence_id"`
-	Host        string `json:"host"`
-	Description string `json:"description"`
-}
-
-type InvestigationResult struct {
-	SchemaVersion   string `json:"schema_version"`
-	InvestigationID string `json:"investigation_id"`
-	EndpointID      string `json:"endpoint_id"` // Augmented in Go
-	Target          string `json:"target"`
-	Platform        string `json:"platform"`
-	StartTime       string `json:"start_time"`
-	EndTime         string `json:"end_time"`
-	RiskScore       struct {
-		Score    int    `json:"score"`
-		Priority string `json:"priority"`
-	} `json:"risk_score"`
-	Graph struct {
-		Nodes []GraphNode `json:"nodes"`
-		Edges []GraphEdge `json:"edges"`
-	} `json:"graph"`
-	Timeline struct {
-		Events []TimelineEvent `json:"events"`
-	} `json:"timeline"`
-}
 
 func IngestHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -63,47 +20,22 @@ func IngestHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		var payload InvestigationResult
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		var req models.IngestRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Invalid JSON"}}`, http.StatusBadRequest)
 			return
 		}
 
 		// Ensure endpoint exists
 		var epId string
-		if err := db.QueryRow("SELECT id FROM endpoints WHERE id = $1", payload.EndpointID).Scan(&epId); err != nil {
+		if err := db.QueryRow("SELECT id FROM endpoints WHERE id = $1", req.EndpointID).Scan(&epId); err != nil {
 			http.Error(w, `{"error":{"code":"UNAUTHORIZED","message":"Invalid endpoint_id"}}`, http.StatusUnauthorized)
 			return
 		}
 
-		// Tx
-		tx, err := db.Begin()
-		if err != nil {
-			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Failed to start transaction"}}`, http.StatusInternalServerError)
-			return
-		}
-		defer tx.Rollback()
-
-		// Upsert Investigation
-		_, err = tx.Exec(`
-			INSERT INTO investigations (id, endpoint_id, schema_version, target, platform, start_time, end_time, risk_score, priority)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			ON CONFLICT (endpoint_id, id) DO UPDATE 
-			SET risk_score = EXCLUDED.risk_score, priority = EXCLUDED.priority
-		`, payload.InvestigationID, payload.EndpointID, payload.SchemaVersion, payload.Target, payload.Platform,
-			payload.StartTime, payload.EndTime, payload.RiskScore.Score, payload.RiskScore.Priority)
-
-		if err != nil {
-			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Failed to insert investigation"}}`, http.StatusInternalServerError)
-			return
-		}
-
-		// We would loop through payload.Graph.Nodes for evidence and findings, etc. 
-		// For brevity in this Phase 5 implementation, we commit the investigation header and return.
-		// Complete parsing and insertion of nodes/edges would go here.
-		
-		if err := tx.Commit(); err != nil {
-			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Failed to commit transaction"}}`, http.StatusInternalServerError)
+		// Upsert Investigation using storage layer (handles validation, tx, inserts)
+		if err := storage.UpsertInvestigationTx(db, req.EndpointID, req.Investigation); err != nil {
+			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Failed to ingest investigation: `+err.Error()+`"}}`, http.StatusInternalServerError)
 			return
 		}
 
@@ -114,7 +46,83 @@ func IngestHandler(db *sql.DB) http.HandlerFunc {
 
 func ListHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":{"code":"METHOD_NOT_ALLOWED","message":"Use GET"}}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		pageStr := r.URL.Query().Get("page")
+		pageSizeStr := r.URL.Query().Get("page_size")
+
+		page := 1
+		if pageStr != "" {
+			p, err := strconv.Atoi(pageStr)
+			if err != nil || p < 1 {
+				http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Invalid page value"}}`, http.StatusBadRequest)
+				return
+			}
+			page = p
+		}
+
+		pageSize := 20
+		if pageSizeStr != "" {
+			ps, err := strconv.Atoi(pageSizeStr)
+			if err != nil || ps < 1 || ps > 100 {
+				http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Invalid page_size value (must be 1-100)"}}`, http.StatusBadRequest)
+				return
+			}
+			pageSize = ps
+		}
+
+		resp, err := storage.ListInvestigations(db, page, pageSize)
+		if err != nil {
+			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Failed to list investigations"}}`, http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"investigations": []interface{}{}})
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func GetHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":{"code":"METHOD_NOT_ALLOWED","message":"Use GET"}}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Parse ID from URL path: /api/v1/investigations/{id}
+		parts := strings.Split(r.URL.Path, "/")
+		if len(parts) < 5 || parts[4] == "" {
+			http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Missing investigation ID"}}`, http.StatusBadRequest)
+			return
+		}
+		id := parts[4]
+
+		if id == "" {
+			http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Invalid investigation ID format"}}`, http.StatusBadRequest)
+			return
+		}
+
+		// Ensure it's either a raw UUID or "inv-" + UUID
+		idToParse := strings.TrimPrefix(id, "inv-")
+		if _, err := uuid.Parse(idToParse); err != nil {
+			http.Error(w, `{"error":{"code":"BAD_REQUEST","message":"Invalid investigation ID format"}}`, http.StatusBadRequest)
+			return
+		}
+
+		inv, err := storage.GetInvestigationByID(db, id)
+		if err != nil {
+			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Failed to retrieve investigation: `+err.Error()+`"}}`, http.StatusInternalServerError)
+			return
+		}
+		if inv == nil {
+			http.Error(w, `{"error":{"code":"NOT_FOUND","message":"Investigation not found"}}`, http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(inv)
 	}
 }
